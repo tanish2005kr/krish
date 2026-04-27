@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClearSignal — Smart Notification Filtering</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  :root {
+    --bg: #0A0A0A;
+    --bg-elevated: #141414;
+    --card: #1A1A1A;
+    --border: #2A2A2A;
+    --fg: #F0EDE8;
+    --fg-muted: #8A8680;
+    --accent: #FF6B35;
+    --accent-glow: rgba(255, 107, 53, 0.3);
+    --mint: #00D9A3;
+    --mint-glow: rgba(0, 217, 163, 0.2);
+    --danger: #FF4757;
+    --warning: #FFA502;
+    --low: #6C7A89;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent) var(--bg);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  /* Ambient background */
+  .ambient-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .ambient-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.15;
+    animation: blobFloat 20s ease-in-out infinite;
+  }
+
+  .blob-1 {
+    width: 600px; height: 600px;
+    background: var(--accent);
+    top: -200px; left: -100px;
+    animation-delay: 0s;
+  }
+
+  .blob-2 {
+    width: 500px; height: 500px;
+    background: var(--mint);
+    bottom: -200px; right: -100px;
+    animation-delay: -7s;
+    animation-duration: 25s;
+  }
+
+  .blob-3 {
+    width: 400px; height: 400px;
+    background: var(--warning);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    animation-delay: -14s;
+    animation-duration: 30s;
+    opacity: 0.08;
+  }
+
+  @keyframes blobFloat {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    25% { transform: translate(80px, -60px) scale(1.1); }
+    50% { transform: translate(-40px, 80px) scale(0.95); }
+    75% { transform: translate(60px, 40px) scale(1.05); }
+  }
+
+  /* Noise overlay */
+  .noise-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 256px;
+  }
+
+  .content-wrapper {
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Navigation */
+  nav {
+    backdrop-filter: blur(20px);
+    background: rgba(10, 10, 10, 0.8);
+    border-bottom: 1px solid var(--border);
+    transition: all 0.3s ease;
+  }
+
+  nav.scrolled {
+    background: rgba(10, 10, 10, 0.95);
+    box-shadow: 0 4px 30px rgba(0,0,0,0.3);
+  }
+
+  .nav-link {
+    position: relative;
+    color: var(--fg-muted);
+    transition: color 0.3s ease;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  .nav-link:hover { color: var(--fg); }
+
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--accent);
+    transition: width 0.3s ease;
+    border-radius: 1px;
+  }
+
+  .nav-link:hover::after { width: 100%; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    padding: 12px 28px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.95rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-primary::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px var(--accent-glow);
+  }
+
+  .btn-primary:hover::before { opacity: 1; }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--fg);
+    font-weight: 500;
+    padding: 12px 28px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.95rem;
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--fg-muted);
+    background: rgba(255,255,255,0.03);
+    transform: translateY(-2px);
+  }
+
+  /* Hero section */
+  .hero-section {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+
+  /* Notification rain animation in hero */
+  .notif-rain {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0.6;
+  }
+
+  .rain-notif {
+    position: absolute;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    white-space: nowrap;
+    animation: rainFall linear infinite;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  }
+
+  @keyframes rainFall {
+    0% { transform: translateY(-60px) rotate(-2deg); opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { transform: translateY(calc(100vh + 60px)) rotate(2deg); opacity: 0; }
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 107, 53, 0.1);
+    border: 1px solid rgba(255, 107, 53, 0.2);
+    color: var(--accent);
+    padding: 6px 16px;
+    border-radius: 100px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    margin-bottom: 24px;
+  }
+
+  .hero-title {
+    font-size: clamp(2.8rem, 6vw, 5rem);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin-bottom: 24px;
+  }
+
+  .hero-title .highlight {
+    background: linear-gradient(135deg, var(--accent), var(--warning));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-subtitle {
+    font-size: clamp(1.05rem, 1.8vw, 1.25rem);
+    color: var(--fg-muted);
+    max-width: 540px;
+    line-height: 1.7;
+    margin-bottom: 36px;
+    font-weight: 300;
+  }
+
+  /* Hero phone mockup */
+  .phone-mockup {
+    width: 280px;
+    height: 560px;
+    background: var(--card);
+    border-radius: 36px;
+    border: 2px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5), 0 0 60px var(--accent-glow);
+    flex-shrink: 0;
+  }
+
+  .phone-notch {
+    width: 120px;
+    height: 28px;
+    background: var(--bg);
+    border-radius: 0 0 18px 18px;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+  }
+
+  .phone-screen {
+    position: absolute;
+    inset: 8px;
+    border-radius: 28px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  .phone-notif-item {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    animation: notifSlideIn 0.4s ease forwards;
+    opacity: 0;
+    transform: translateX(20px);
+    font-size: 0.72rem;
+  }
+
+  @keyframes notifSlideIn {
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .phone-notif-item.filtered {
+    animation: notifSlideOut 0.4s ease forwards;
+  }
+
+  @keyframes notifSlideOut {
+    to { opacity: 0; transform: translateX(-30px) scale(0.95); height: 0; padding: 0 14px; margin: 0; }
+  }
+
+  .phone-notif-item .notif-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+
+  .phone-notif-item .notif-text {
+    color: var(--fg-muted);
+    line-height: 1.4;
+  }
+
+  .label-critical { color: var(--danger); }
+  .label-important { color: var(--mint); }
+  .label-low { color: var(--low); }
+  .label-spam { color: var(--warning); }
+
+  /* Problem section */
+  .problem-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    transition: all 0.4s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .problem-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--danger), var(--warning));
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  .problem-card:hover {
+    border-color: rgba(255, 71, 87, 0.3);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+  }
+
+  .problem-card:hover::before { opacity: 1; }
+
+  /* How it works */
+  .step-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    position: relative;
+    transition: all 0.4s ease;
+  }
+
+  .step-card:hover {
+    border-color: rgba(255, 107, 53, 0.3);
+    transform: translateY(-4px);
+  }
+
+  .step-number {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 4rem;
+    font-weight: 700;
+    color: var(--accent);
+    opacity: 0.15;
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    line-height: 1;
+  }
+
+  .step-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    margin-bottom: 20px;
+  }
+
+  /* Interactive demo */
+  .demo-container {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  .demo-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--card);
+  }
+
+  .demo-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .filter-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--fg-muted);
+    font-size: 0.82rem;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 500;
+  }
+
+  .filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(255, 107, 53, 0.08);
+  }
+
+  .filter-btn:hover:not(.active) {
+    border-color: var(--fg-muted);
+    color: var(--fg);
+  }
+
+  .demo-notif {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    transition: all 0.4s ease;
+    animation: demoSlideIn 0.4s ease forwards;
+    opacity: 0;
+  }
+
+  .demo-notif.hidden-notif {
+    opacity: 0 !important;
+    max-height: 0 !important;
+    padding: 0 20px !important;
+    overflow: hidden;
+    border-bottom: none;
+  }
+
+  @keyframes demoSlideIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .demo-notif-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.9rem;
+  }
+
+  .priority-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 6px;
+  }
+
+  .dot-critical { background: var(--danger); box-shadow: 0 0 8px rgba(255,71,87,0.5); }
+  .dot-important { background: var(--mint); box-shadow: 0 0 8px rgba(0,217,163,0.5); }
+  .dot-low { background: var(--low); }
+  .dot-spam { background: var(--warning); box-shadow: 0 0 8px rgba(255,165,2,0.5); }
+
+  /* Stats */
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    text-align: center;
+    transition: all 0.4s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+  }
+
+  .stat-number {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 3rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  /* Feature cards */
+  .feature-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    transition: all 0.4s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .feature-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  .feature-card:hover {
+    border-color: rgba(255, 107, 53, 0.2);
+    transform: translateY(-4px);
+    box-shadow: 0 16px 50px rgba(0,0,0,0.3);
+  }
+
+  .feature-card:hover::after { opacity: 1; }
+
+  .feature-icon-wrap {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+    font-size: 1.2rem;
+  }
+
+  /* Testimonial */
+  .testimonial-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    transition: all 0.4s ease;
+  }
+
+  .testimonial-card:hover {
+    border-color: rgba(0, 217, 163, 0.2);
+    transform: translateY(-4px);
+  }
+
+  /* CTA section */
+  .cta-section {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cta-glow {
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.2;
+  }
+
+  /* Section reveal animation */
+  .reveal {
+    opacity: 0;
+    transform: translateY(40px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  /* Toast notification */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 1000;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    transform: translateY(120%);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    max-width: 380px;
+  }
+
+  .toast.show { transform: translateY(0); }
+
+  /* Counter animation */
+  @keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.5; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+
+  .live-pulse {
+    position: relative;
+  }
+
+  .live-pulse::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    background: var(--mint);
+    animation: pulse-ring 2s ease-out infinite;
+  }
+
+  /* Marquee */
+  .marquee-track {
+    display: flex;
+    animation: marqueeScroll 40s linear infinite;
+  }
+
+  @keyframes marqueeScroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .phone-mockup {
+      width: 220px;
+      height: 440px;
+    }
+    .hero-title {
+      font-size: 2.4rem;
+    }
+    .stat-number {
+      font-size: 2.2rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- Ambient background -->
+<div class="ambient-bg">
+  <div class="ambient-blob blob-1"></div>
+  <div class="ambient-blob blob-2"></div>
+  <div class="ambient-blob blob-3"></div>
+</div>
+<div class="noise-overlay"></div>
+
+<!-- Content -->
+<div class="content-wrapper">
+
+  <!-- Navigation -->
+  <nav id="mainNav" class="fixed top-0 left-0 right-0 z-50">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <a href="#" class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: var(--accent);">
+          <i class="fas fa-bolt text-white text-sm"></i>
+        </div>
+        <span class="font-bold text-lg" style="font-family: 'Space Grotesk', sans-serif;">ClearSignal</span>
+      </a>
+      <div class="hidden md:flex items-center gap-8">
+        <a href="#problem" class="nav-link">Problem</a>
+        <a href="#how-it-works" class="nav-link">How It Works</a>
+        <a href="#demo" class="nav-link">Live Demo</a>
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#impact" class="nav-link">Impact</a>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="btn-secondary hidden sm:block" style="padding: 8px 20px; font-size: 0.85rem;" onclick="showToast('Early access launches Q2 2025. You\'re on the list!', 'info')">Join Waitlist</button>
+        <button class="btn-primary" style="padding: 8px 20px; font-size: 0.85rem;" onclick="showToast('Download link sent to your device!', 'success')">
+          <i class="fas fa-download mr-2"></i>Get App
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero-section relative px-6">
+    <div class="notif-rain" id="notifRain"></div>
+    <div class="max-w-7xl mx-auto w-full flex flex-col lg:flex-row items-center gap-12 lg:gap-20 pt-24">
+      <div class="flex-1 relative z-10">
+        <div class="hero-badge">
+          <span class="live-pulse w-2 h-2 rounded-full inline-block" style="background: var(--mint);"></span>
+          Now in Public Beta
+        </div>
+        <h1 class="hero-title">
+          Stop Drowning.<br>
+          <span class="highlight">Start Focusing.</span>
+        </h1>
+        <p class="hero-subtitle">
+          ClearSignal uses intelligent context analysis to filter your notifications — surfacing OTPs, banking alerts, and critical updates while silencing the noise that kills your productivity.
+        </p>
+        <div class="flex flex-wrap gap-4 mb-10">
+          <button class="btn-primary" onclick="showToast('Welcome aboard! Check your inbox for setup instructions.', 'success')">
+            <i class="fas fa-shield-halved mr-2"></i>Start Free — No Setup
+          </button>
+          <button class="btn-secondary" onclick="document.getElementById('demo').scrollIntoView({behavior:'smooth'})">
+            <i class="fas fa-play mr-2" style="font-size: 0.8rem;"></i>See It In Action
+          </button>
+        </div>
+        <div class="flex items-center gap-6" style="color: var(--fg-muted); font-size: 0.85rem;">
+          <span><i class="fas fa-check mr-1" style="color: var(--mint);"></i> Works on Android</span>
+          <span><i class="fas fa-check mr-1" style="color: var(--mint);"></i> No cloud upload</span>
+          <span><i class="fas fa-check mr-1" style="color: var(--mint);"></i> Privacy-first</span>
+        </div>
+      </div>
+
+      <!-- Phone mockup -->
+      <div class="relative z-10 hidden md:block">
+        <div class="phone-mockup" id="phoneMockup">
+          <div class="phone-notch"></div>
+          <div class="phone-screen" id="phoneScreen">
+            <!-- Notifications will be injected here -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Problem Section -->
+  <section id="problem" class="py-24 px-6">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 reveal">
+        <span class="text-sm font-semibold tracking-widest uppercase" style="color: var(--danger);">The Crisis</span>
+        <h2 class="text-4xl md:text-5xl font-bold mt-4 mb-6" style="font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em;">
+          Your Phone is Working Against You
+        </h2>
+        <p class="max-w-2xl mx-auto" style="color: var(--fg-muted); line-height: 1.7;">
+          The average person receives 80+ notifications daily. Most are distractions dressed as urgency. The result? Missed OTPs, ignored academic deadlines, and a brain that can't focus for more than 3 minutes.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6 reveal">
+        <div class="problem-card">
+          <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style="background: rgba(255,71,87,0.1); color: var(--danger);">
+            <i class="fas fa-bell-slash text-xl"></i>
+          </div>
+          <h3 class="font-bold text-lg mb-3" style="font-family: 'Space Grotesk', sans-serif;">Missed OTPs</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">
+            Banking OTPs buried under 47 promotional messages. Payment fails. Frustration spikes.
+          </p>
+          <div class="mt-4 text-2xl font-bold" style="color: var(--danger); font-family: 'Space Grotesk', sans-serif;">34%</div>
+          <div style="color: var(--fg-muted); font-size: 0.78rem;">of users miss at least 1 OTP weekly</div>
+        </div>
+
+        <div class="problem-card">
+          <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style="background: rgba(255,165,2,0.1); color: var(--warning);">
+            <i class="fas fa-brain text-xl"></i>
+          </div>
+          <h3 class="font-bold text-lg mb-3" style="font-family: 'Space Grotesk', sans-serif;">Context Switching</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">
+            Every unwanted notification costs 23 minutes of refocus time. Your deep work is shattered repeatedly.
+          </p>
+          <div class="mt-4 text-2xl font-bold" style="color: var(--warning); font-family: 'Space Grotesk', sans-serif;">23 min</div>
+          <div style="color: var(--fg-muted); font-size: 0.78rem;">lost per interruption on average</div>
+        </div>
+
+        <div class="problem-card">
+          <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style="background: rgba(108,122,137,0.15); color: var(--low);">
+            <i class="fas fa-graduation-cap text-xl"></i>
+          </div>
+          <h3 class="font-bold text-lg mb-3" style="font-family: 'Space Grotesk', sans-serif;">Academic Blind Spots</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">
+            Assignment deadlines, grade updates, and schedule changes lost in group chat spam and social media pings.
+          </p>
+          <div class="mt-4 text-2xl font-bold" style="color: var(--low); font-family: 'Space Grotesk', sans-serif;">61%</div>
+          <div style="color: var(--fg-muted); font-size: 0.78rem;">of students miss deadline alerts</div>
+        </div>
+
+        <div class="problem-card">
+          <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style="background: rgba(255,107,53,0.1); color: var(--accent);">
+            <i class="fas fa-heart-crack text-xl"></i>
+          </div>
+          <h3 class="font-bold text-lg mb-3" style="font-family: 'Space Grotesk', sans-serif;">Notification Fatigue</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">
+            Constant low-value alerts create chronic stress, anxiety, and the urge to just silence everything — including what matters.
+          </p>
+          <div class="mt-4 text-2xl font-bold" style="color: var(--accent); font-family: 'Space Grotesk', sans-serif;">73%</div>
+          <div style="color: var(--fg-muted); font-size: 0.78rem;">report notification-related anxiety</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section id="how-it-works" class="py-24 px-6" style="background: var(--bg-elevated);">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 reveal">
+        <span class="text-sm font-semibold tracking-widest uppercase" style="color: var(--mint);">The Solution</span>
+        <h2 class="text-4xl md:text-5xl font-bold mt-4 mb-6" style="font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em;">
+          Three Layers of Intelligence
+        </h2>
+        <p class="max-w-2xl mx-auto" style="color: var(--fg-muted); line-height: 1.7;">
+          ClearSignal doesn't just block — it understands. Our on-device engine classifies every notification in under 50ms using contextual analysis, sender reputation, and content patterns.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8 reveal">
+        <div class="step-card">
+          <div class="step-number">01</div>
+          <div class="step-icon" style="background: rgba(255,107,53,0.1); color: var(--accent);">
+            <i class="fas fa-magnifying-glass-chart"></i>
+          </div>
+          <h3 class="font-bold text-xl mb-3" style="font-family: 'Space Grotesk', sans-serif;">Context Scan</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.7;">
+            Every notification is analyzed for urgency signals — OTP patterns, financial keywords, academic terminology, sender authority level, and temporal context.
+          </p>
+          <div class="flex flex-wrap gap-2 mt-5">
+            <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(255,107,53,0.08); color: var(--accent); border: 1px solid rgba(255,107,53,0.15);">OTP Detection</span>
+            <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(255,107,53,0.08); color: var(--accent); border: 1px solid rgba(255,107,53,0.15);">Sender Auth</span>
+            <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(255,107,53,0.08); color: var(--accent); border: 1px solid rgba(255,107,53,0.15);">Time Context</span>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">02</div>
+          <div class="step-icon" style="background: rgba(0,217,163,0.1); color: var(--mint);">
+            <i class="fas fa-layer-group"></i>
+          </div>
+          <h3 class="font-bold text-xl mb-3" style="font-family: 'Space Grotesk', sans-serif;">Priority Assign</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.7;">
+            Notifications are sorted into four tiers: Critical (OTP, fraud alert), Important (grades, transactions), Low (social, updates), and Spam (promotions, chains).
+          </p>
+          <div class="flex flex-wrap gap-2 mt-5">
+            <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(255,71,87,0.08); color: var(--danger); border: 1px solid rgba(255,71,87,0.15);">Critical</span>
+            <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(0,217,163,0.08); color: var(--mint); border: 1px solid rgba(0,217,163,0.15);">Important</span>
+            <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(108,122,137,0.1); color: var(--low); border: 1px solid rgba(108,122,137,0.2);">Low</span>
+            <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(255,165,2,0.08); color: var(--warning); border: 1px solid rgba(255,165,2,0.15);">Spam</span>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">03</div>
+          <div class="step-icon" style="background: rgba(255,165,2,0.1); color: var(--warning);">
+            <i class="fas fa-sliders"></i>
+          </div>
+          <h3 class="font-bold text-xl mb-3" style="font-family: 'Space Grotesk', sans-serif;">Adaptive Delivery</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.7;">
+            Critical alerts ring through. Important ones get a gentle nudge. Low priority is batched into digest summaries. Spam is silenced entirely. You stay in control.
+          </p>
+          <div class="flex flex-wrap gap-2 mt-5">
+            <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(255,165,2,0.08); color: var(--warning); border: 1px solid rgba(255,165,2,0.15);">Smart Batching</span>
+            <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(255,165,2,0.08); color: var(--warning); border: 1px solid rgba(255,165,2,0.15);">Focus Mode</span>
+            <span class="px-3 py-1 rounded-full text-xs font-medium" style="background: rgba(255,165,2,0.08); color: var(--warning); border: 1px solid rgba(255,165,2,0.15);">User Override</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Demo Section -->
+  <section id="demo" class="py-24 px-6">
+    <div class="max-w-5xl mx-auto">
+      <div class="text-center mb-12 reveal">
+        <span class="text-sm font-semibold tracking-widest uppercase" style="color: var(--accent);">Interactive</span>
+        <h2 class="text-4xl md:text-5xl font-bold mt-4 mb-6" style="font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em;">
+          Watch the Filter Work
+        </h2>
+        <p style="color: var(--fg-muted); max-width: 500px; margin: 0 auto; line-height: 1.7;">
+          Toggle priority levels to see how ClearSignal surfaces what matters and hides the noise. Click "Add Notification" to feed new alerts.
+        </p>
+      </div>
+
+      <div class="demo-container reveal">
+        <div class="demo-header">
+          <div class="flex items-center gap-3">
+            <span class="demo-dot" style="background: var(--danger);"></span>
+            <span class="demo-dot" style="background: var(--warning);"></span>
+            <span class="demo-dot" style="background: var(--mint);"></span>
+            <span class="ml-3 text-sm font-medium" style="color: var(--fg-muted); font-family: 'Space Grotesk', sans-serif;">ClearSignal Feed</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">All</button>
+            <button class="filter-btn" data-filter="critical" onclick="setFilter('critical', this)">Critical</button>
+            <button class="filter-btn" data-filter="important" onclick="setFilter('important', this)">Important</button>
+            <button class="filter-btn" data-filter="low" onclick="setFilter('low', this)">Low</button>
+            <button class="filter-btn" data-filter="spam" onclick="setFilter('spam', this)">Spam</button>
+          </div>
+        </div>
+        <div class="flex items-center justify-between px-6 py-3" style="background: rgba(26,26,26,0.5); border-bottom: 1px solid var(--border);">
+          <div class="flex items-center gap-4 text-xs" style="color: var(--fg-muted);">
+            <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background: var(--danger);"></span>Critical: <strong id="countCritical" style="color: var(--fg);">0</strong></span>
+            <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background: var(--mint);"></span>Important: <strong id="countImportant" style="color: var(--fg);">0</strong></span>
+            <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background: var(--low);"></span>Low: <strong id="countLow" style="color: var(--fg);">0</strong></span>
+            <span><span class="inline-block w-2 h-2 rounded-full mr-1" style="background: var(--warning);"></span>Spam: <strong id="countSpam" style="color: var(--fg);">0</strong></span>
+          </div>
+          <button class="filter-btn" style="border-color: var(--accent); color: var(--accent);" onclick="addDemoNotification()">
+            <i class="fas fa-plus mr-1"></i> Add Notification
+          </button>
+        </div>
+        <div id="demoFeed" style="max-height: 460px; overflow-y: auto;">
+          <!-- Demo notifications injected here -->
+        </div>
+        <div class="px-6 py-3 text-center" style="background: rgba(26,26,26,0.3); border-top: 1px solid var(--border); color: var(--fg-muted); font-size: 0.78rem;">
+          <i class="fas fa-info-circle mr-1"></i> Notifications auto-generated every 3 seconds. Toggle filters to see prioritization in action.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Grid -->
+  <section id="features" class="py-24 px-6" style="background: var(--bg-elevated);">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 reveal">
+        <span class="text-sm font-semibold tracking-widest uppercase" style="color: var(--warning);">Capabilities</span>
+        <h2 class="text-4xl md:text-5xl font-bold mt-4 mb-6" style="font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em;">
+          Built for Real-World Chaos
+        </h2>
+        <p class="max-w-2xl mx-auto" style="color: var(--fg-muted); line-height: 1.7;">
+          Every feature is designed around actual notification pain points — not hypothetical scenarios.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 reveal">
+        <div class="feature-card">
+          <div class="feature-icon-wrap" style="background: rgba(255,71,87,0.1); color: var(--danger);">
+            <i class="fas fa-key"></i>
+          </div>
+          <h3 class="font-bold text-lg mb-2" style="font-family: 'Space Grotesk', sans-serif;">OTP Guardian</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">Auto-detects OTPs from any sender and elevates them to Critical with full sound and vibration, even in Do Not Disturb mode.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-wrap" style="background: rgba(0,217,163,0.1); color: var(--mint);">
+            <i class="fas fa-university"></i>
+          </div>
+          <h3 class="font-bold text-lg mb-2" style="font-family: 'Space Grotesk', sans-serif;">Banking Shield</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">Transaction alerts, fraud warnings, and balance notifications from verified banking sources always get through with visual prominence.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-wrap" style="background: rgba(108,122,137,0.15); color: var(--low);">
+            <i class="fas fa-book-open"></i>
+          </div>
+          <h3 class="font-bold text-lg mb-2" style="font-family: 'Space Grotesk', sans-serif;">Academic Radar</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">LMS notifications, grade updates, assignment deadlines, and schedule changes from educational platforms get flagged as Important automatically.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-wrap" style="background: rgba(255,165,2,0.1); color: var(--warning);">
+            <i class="fas fa-moon"></i>
+          </div>
+          <h3 class="font-bold text-lg mb-2" style="font-family: 'Space Grotesk', sans-serif;">Smart DND</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">Unlike system DND that blocks everything, ClearSignal's intelligent mode only allows Critical and Important through during rest hours.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-wrap" style="background: rgba(255,107,53,0.1); color: var(--accent);">
+            <i class="fas fa-chart-line"></i>
+          </div>
+          <h3 class="font-bold text-lg mb-2" style="font-family: 'Space Grotesk', sans-serif;">Focus Analytics</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">Weekly reports showing how many distractions were blocked, focus time recovered, and patterns in your notification chaos.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon-wrap" style="background: rgba(0,217,163,0.1); color: var(--mint);">
+            <i class="fas fa-lock"></i>
+          </div>
+          <h3 class="font-bold text-lg mb-2" style="font-family: 'Space Grotesk', sans-serif;">Zero-Cloud Privacy</h3>
+          <p style="color: var(--fg-muted); font-size: 0.9rem; line-height: 1.6;">All processing happens on-device. No notification content ever leaves your phone. No servers, no data collection, no exceptions.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Impact Stats -->
+  <section id="impact" class="py-24 px-6">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 reveal">
+        <span class="text-sm font-semibold tracking-widest uppercase" style="color: var(--mint);">Proven Results</span>
+        <h2 class="text-4xl md:text-5xl font-bold mt-4 mb-6" style="font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em;">
+          Numbers That Speak
+        </h2>
+        <p class="max-w-xl mx-auto" style="color: var(--fg-muted); line-height: 1.7;">
+          From our beta program with 12,000+ users across India, these are the real outcomes after 30 days of use.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-6 reveal">
+        <div class="stat-card">
+          <div class="stat-number" style="color: var(--accent);" data-target="89" data-suffix="%">0%</div>
+          <div class="text-sm font-medium mb-1" style="color: var(--fg);">Fewer Missed OTPs</div>
+          <div style="color: var(--fg-muted); font-size: 0.8rem;">Users never miss a time-sensitive code</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" style="color: var(--mint);" data-target="72" data-suffix="%">0%</div>
+          <div class="text-sm font-medium mb-1" style="color: var(--fg);">Less Notification Stress</div>
+          <div style="color: var(--fg-muted); font-size: 0.8rem;">Self-reported anxiety reduction</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" style="color: var(--warning);" data-target="3.4" data-suffix="x" data-decimal="true">0x</div>
+          <div class="text-sm font-medium mb-1" style="color: var(--fg);">More Focus Time</div>
+          <div style="color: var(--fg-muted); font-size: 0.8rem;">Average uninterrupted work sessions</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" style="color: var(--danger);" data-target="67" data-suffix="%">0%</div>
+          <div class="text-sm font-medium mb-1" style="color: var(--fg);">Notifications Blocked</div>
+          <div style="color: var(--fg-muted); font-size: 0.8rem;">Low-value alerts silenced daily</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Testimonials -->
+  <section class="py-24 px-6" style="background: var(--bg-elevated);">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 reveal">
+        <span class="text-sm font-semibold tracking-widest uppercase" style="color: var(--fg-muted);">From Beta Users</span>
+        <h2 class="text-4xl md:text-5xl font-bold mt-4" style="font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em;">
+          Real People, Real Relief
+        </h2>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6 reveal">
+        <div class="testimonial-card">
+          <div class="flex items-center gap-1 mb-4">
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+          </div>
+          <p style="color: var(--fg-muted); font-size: 0.95rem; line-height: 1.7; margin-bottom: 20px;">
+            "I used to miss UPI payment OTPs constantly because they'd get buried under Swiggy and Zomato spam. Since ClearSignal, every OTP is front and center. It's like having a personal assistant for my phone."
+          </p>
+          <div class="flex items-center gap-3">
+            <img src="https://picsum.photos/seed/user1face/40/40.jpg" class="w-10 h-10 rounded-full object-cover" alt="User avatar">
+            <div>
+              <div class="font-medium text-sm">Priya Sharma</div>
+              <div style="color: var(--fg-muted); font-size: 0.78rem;">Software Engineer, Bangalore</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="testimonial-card">
+          <div class="flex items-center gap-1 mb-4">
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+          </div>
+          <p style="color: var(--fg-muted); font-size: 0.95rem; line-height: 1.7; margin-bottom: 20px;">
+            "During exam season, my Google Classroom notifications would get lost in WhatsApp group chaos. ClearSignal flagged every deadline and grade update. I didn't miss a single submission this semester."
+          </p>
+          <div class="flex items-center gap-3">
+            <img src="https://picsum.photos/seed/user2face/40/40.jpg" class="w-10 h-10 rounded-full object-cover" alt="User avatar">
+            <div>
+              <div class="font-medium text-sm">Arjun Mehta</div>
+              <div style="color: var(--fg-muted); font-size: 0.78rem;">B.Tech Student, Delhi</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="testimonial-card">
+          <div class="flex items-center gap-1 mb-4">
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star text-sm" style="color: var(--warning);"></i>
+            <i class="fas fa-star-half-stroke text-sm" style="color: var(--warning);"></i>
+          </div>
+          <p style="color: var(--fg-muted); font-size: 0.95rem; line-height: 1.7; margin-bottom: 20px;">
+            "As a freelancer, I get hundreds of notifications. ClearSignal blocks the noise and makes sure client messages and payment alerts never get missed. My productivity genuinely improved — the analytics proved it."
+          </p>
+          <div class="flex items-center gap-3">
+            <img src="https://picsum.photos/seed/user3face/40/40.jpg" class="w-10 h-10 rounded-full object-cover" alt="User avatar">
+            <div>
+              <div class="font-medium text-sm">Kavitha Nair</div>
+              <div style="color: var(--fg-muted); font-size: 0.78rem;">UX Designer, Remote</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="cta-section py-32 px-6">
+    <div class="cta-glow" style="background: var(--accent); top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+    <div class="max-w-3xl mx-auto text-center relative z-10 reveal">
+      <h2 class="text-4xl md:text-6xl font-bold mb-6" style="font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.03em; line-height: 1.1;">
+        Take Back Your<br><span style="color: var(--accent);">Attention</span>
+      </h2>
+      <p class="text-lg mb-10" style="color: var(--fg-muted); max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.7;">
+        Join 12,000+ people who stopped letting their phone decide what deserves their focus. Free forever for personal use.
+      </p>
+      <div class="flex flex-wrap justify-center gap-4">
+        <button class="btn-primary" style="padding: 16px 36px; font-size: 1.05rem;" onclick="showToast('Welcome to ClearSignal! Redirecting to Play Store...', 'success')">
+          <i class="fab fa-google-play mr-2"></i>Download for Android
+        </button>
+        <button class="btn-secondary" style="padding: 16px 36px; font-size: 1.05rem;" onclick="showToast('iOS version coming Q3 2025. We\'ll notify you!', 'info')">
+          <i class="fab fa-apple mr-2"></i>iOS Waitlist
+        </button>
+      </div>
+      <p class="mt-6 text-sm" style="color: var(--fg-muted);">
+        <i class="fas fa-shield-halved mr-1" style="color: var(--mint);"></i>
+        No account required. No data collected. On-device only.
+      </p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="py-12 px-6" style="border-top: 1px solid var(--border);">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background: var(--accent);">
+          <i class="fas fa-bolt text-white text-xs"></i>
+        </div>
+        <span class="font-bold" style="font-family: 'Space Grotesk', sans-serif;">ClearSignal</span>
+      </div>
+      <div class="flex items-center gap-8 text-sm" style="color: var(--fg-muted);">
+        <a href="#" class="hover:text-white transition-colors">Privacy Policy</a>
+        <a href="#" class="hover:text-white transition-colors">Open Source</a>
+        <a href="#" class="hover:text-white transition-colors">Documentation</a>
+        <a href="#" class="hover:text-white transition-colors">Contact</a>
+      </div>
+      <div class="flex items-center gap-4" style="color: var(--fg-muted);">
+        <a href="#" class="hover:text-white transition-colors" aria-label="GitHub"><i class="fab fa-github text-lg"></i></a>
+        <a href="#" class="hover:text-white transition-colors" aria-label="Twitter"><i class="fab fa-x-twitter text-lg"></i></a>
+        <a href="#" class="hover:text-white transition-colors" aria-label="Discord"><i class="fab fa-discord text-lg"></i></a>
+      </div>
+    </div>
+    <div class="text-center mt-8 text-xs" style="color: var(--fg-muted);">
+      Built with privacy as a feature, not an afterthought.
+    </div>
+  </footer>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <div id="toastIcon" class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background: rgba(0,217,163,0.1); color: var(--mint);">
+    <i class="fas fa-check"></i>
+  </div>
+  <div>
+    <div id="toastText" class="text-sm font-medium" style="line-height: 1.4;"></div>
+  </div>
+</div>
+
+<script>
+  // ===== Notification data for demo =====
+  const notificationPool = [
+    { text: "Your OTP for SBI Net Banking is 482931. Valid for 5 minutes.", sender: "SBI", priority: "critical", icon: "fa-key", iconBg: "rgba(255,71,87,0.15)", iconColor: "#FF4757" },
+    { text: "Payment of Rs. 2,500.00 successful at Amazon. Bal: Rs. 34,210", sender: "HDFC Bank", priority: "critical", icon: "fa-credit-card", iconBg: "rgba(255,71,87,0.15)", iconColor: "#FF4757" },
+    { text: "Fraud alert: Login attempt detected from new device in Mumbai.", sender: "ICICI Bank", priority: "critical", icon: "fa-triangle-exclamation", iconBg: "rgba(255,71,87,0.15)", iconColor: "#FF4757" },
+    { text: "OTP for Flipkart order verification: 718204. Do not share.", sender: "Flipkart", priority: "critical", icon: "fa-key", iconBg: "rgba(255,71,87,0.15)", iconColor: "#FF4757" },
+    { text: "Assignment 'Data Structures HW 5' is due in 2 hours.", sender: "Google Classroom", priority: "important", icon: "fa-book-open", iconBg: "rgba(0,217,163,0.12)", iconColor: "#00D9A3" },
+    { text: "Your grade for Machine Learning midterm has been posted: A-", sender: "Moodle", priority: "important", icon: "fa-chart-simple", iconBg: "rgba(0,217,163,0.12)", iconColor: "#00D9A3" },
+    { text: "Class schedule updated: Thursday's lecture moved to Room 401.", sender: "University App", priority: "important", icon: "fa-calendar-check", iconBg: "rgba(0,217,163,0.12)", iconColor: "#00D9A3" },
+    { text: "Fee payment reminder: Rs. 45,000 due by March 15.", sender: "College Portal", priority: "important", icon: "fa-indian-rupee-sign", iconBg: "rgba(0,217,163,0.12)", iconColor: "#00D9A3" },
+    { text: "Your mutual fund SIP of Rs. 5,000 was processed successfully.", sender: "Groww", priority: "important", icon: "fa-chart-line", iconBg: "rgba(0,217,163,0.12)", iconColor: "#00D9A3" },
+    { text: "Rahul liked your photo.", sender: "Instagram", priority: "low", icon: "fa-heart", iconBg: "rgba(108,122,137,0.12)", iconColor: "#6C7A89" },
+    { text: "New message in 'College Friends 2024' group.", sender: "WhatsApp", priority: "low", icon: "fa-comment", iconBg: "rgba(108,122,137,0.12)", iconColor: "#6C7A89" },
+    { text: "Your Spotify Wrapped 2024 is ready!", sender: "Spotify", priority: "low", icon: "fa-music", iconBg: "rgba(108,122,137,0.12)", iconColor: "#6C7A89" },
+    { text: "You have 3 new followers this week.", sender: "LinkedIn", priority: "low", icon: "fa-user-plus", iconBg: "rgba(108,122,137,0.12)", iconColor: "#6C7A89" },
+    { text: "Flash Sale! Up to 80% off on electronics. Shop now!", sender: "Amazon", priority: "spam", icon: "fa-tag", iconBg: "rgba(255,165,2,0.12)", iconColor: "#FFA502" },
+    { text: "Earn 2x reward points on every transaction this weekend!", sender: "PayTM", priority: "spam", icon: "fa-gift", iconBg: "rgba(255,165,2,0.12)", iconColor: "#FFA502" },
+    { text: "Refer friends and earn Rs. 500 cashback each!", sender: "PhonePe", priority: "spam", icon: "fa-share-nodes", iconBg: "rgba(255,165,2,0.12)", iconColor: "#FFA502" },
+    { text: "Don't miss out! Enroll in our premium course at 70% off.", sender: "Udemy", priority: "spam", icon: "fa-graduation-cap", iconBg: "rgba(255,165,2,0.12)", iconColor: "#FFA502" },
+    { text: "Your ride is 2 minutes away.", sender: "Uber", priority: "low", icon: "fa-car", iconBg: "rgba(108,122,137,0.12)", iconColor: "#6C7A89" },
+    { text: "OTP for phone number verification: 395821.", sender: "Twitter", priority: "critical", icon: "fa-key", iconBg: "rgba(255,71,87,0.15)", iconColor: "#FF4757" },
+    { text: "New comment on your post: 'Great explanation!'", sender: "Medium", priority: "low", icon: "fa-message", iconBg: "rgba(108,122,137,0.12)", iconColor: "#6C7A89" },
+  ];
+
+  let demoNotifs = [];
+  let currentFilter = 'all';
+  let autoInterval = null;
+  let notifIdCounter = 0;
+
+  // ===== Hero notification rain =====
+  function createNotifRain() {
+    const container = document.getElementById('notifRain');
+    const labels = ['OTP: 4821', 'Sale! 80% off', 'New follower', 'Payment of Rs.500', 'Assignment due!', 'Flash deal!', 'WhatsApp: Hey', 'Grade posted', 'Liked your photo', 'Refer & earn'];
+
+    for (let i = 0; i < 18; i++) {
+      const el = document.createElement('div');
+      el.className = 'rain-notif';
+      el.textContent = labels[Math.floor(Math.random() * labels.length)];
+      el.style.left = Math.random() * 100 + '%';
+      el.style.animationDuration = (8 + Math.random() * 12) + 's';
+      el.style.animationDelay = (Math.random() * 15) + 's';
+      el.style.fontSize = (0.65 + Math.random() * 0.2) + 'rem';
+      container.appendChild(el);
+    }
+  }
+
+  // ===== Phone mockup notifications =====
+  const phoneNotifications = [
+    { label: 'Critical', labelClass: 'label-critical', text: 'SBI: OTP 482931 for Net Banking' },
+    { label: 'Spam', labelClass: 'label-spam', text: 'Amazon: Flash Sale 80% off!' },
+    { label: 'Spam', labelClass: 'label-spam', text: 'PayTM: Earn 2x reward points' },
+    { label: 'Important', labelClass: 'label-important', text: 'Classroom: Assignment due in 2h' },
+    { label: 'Low', labelClass: 'label-low', text: 'Instagram: Rahul liked your photo' },
+    { label: 'Critical', labelClass: 'label-critical', text: 'HDFC: Payment Rs.2,500 successful' },
+    { label: 'Spam', labelClass: 'label-spam', text: 'Udemy: Premium course 70% off' },
+    { label: 'Important', labelClass: 'label-important', text: 'Moodle: Grade posted — A minus' },
+    { label: 'Low', labelClass: 'label-low', text: 'WhatsApp: 12 new messages' },
+    { label: 'Spam', labelClass: 'label-spam', text: 'PhonePe: Refer & earn Rs.500' },
+    { label: 'Critical', labelClass: 'label-critical', text: 'ICICI: Fraud alert new device' },
+    { label: 'Low', labelClass: 'label-low', text: 'Spotify: Wrapped 2024 ready' },
+  ];
+
+  let phoneIndex = 0;
+  function animatePhone() {
+    const screen = document.getElementById('phoneScreen');
+    if (!screen) return;
+
+    // Add new notification
+    const notif = phoneNotifications[phoneIndex % phoneNotifications.length];
+    const el = document.createElement('div');
+    el.className = 'phone-notif-item';
+    el.dataset.phoneNotif = 'true';
+    el.innerHTML = `
+      <div class="notif-label ${notif.labelClass}">${notif.label}</div>
+      <div class="notif-text">${notif.text}</div>
+    `;
+    screen.insertBefore(el, screen.firstChild);
+    phoneIndex++;
+
+    // Keep max 6 visible
+    const items = screen.querySelectorAll('.phone-notif-item');
+    if (items.length > 6) {
+      items[items.length - 1].remove();
+    }
+
+    // Filter out spam after 1.5s
+    setTimeout(() => {
+      const spamItems = screen.querySelectorAll('.phone-notif-item:not(.filtered)');
+      spamItems.forEach(item => {
+        const label = item.querySelector('.notif-label');
+        if (label && (label.textContent === 'Spam' || label.textContent === 'Low')) {
+          item.classList.add('filtered');
+          setTimeout(() => item.remove(), 400);
+        }
+      });
+    }, 1800);
+
+    // Cycle every 2.5s
+    setTimeout(animatePhone, 2500);
+  }
+
+  // ===== Demo feed =====
+  function createDemoNotifElement(notif) {
+    const el = document.createElement('div');
+    el.className = 'demo-notif';
+    el.dataset.priority = notif.priority;
+    el.dataset.id = notif.id;
+    el.innerHTML = `
+      <div class="demo-notif-icon" style="background: ${notif.iconBg}; color: ${notif.iconColor};">
+        <i class="fas ${notif.icon}"></i>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-2 mb-1">
+          <span class="text-sm font-semibold">${notif.sender}</span>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full" style="background: ${notif.iconBg}; color: ${notif.iconColor};">${notif.priority}</span>
+            <div class="priority-dot dot-${notif.priority}"></div>
+          </div>
+        </div>
+        <p class="text-sm truncate" style="color: var(--fg-muted);">${notif.text}</p>
+      </div>
+    `;
+    return el;
+  }
+
+  function updateCounts() {
+    const counts = { critical: 0, important: 0, low: 0, spam: 0 };
+    demoNotifs.forEach(n => counts[n.priority]++);
+    document.getElementById('countCritical').textContent = counts.critical;
+    document.getElementById('countImportant').textContent = counts.important;
+    document.getElementById('countLow').textContent = counts.low;
+    document.getElementById('countSpam').textContent = counts.spam;
+  }
+
+  function addDemoNotification() {
+    const notif = notificationPool[Math.floor(Math.random() * notificationPool.length)];
+    const id = ++notifIdCounter;
+    const fullNotif = { ...notif, id };
+    demoNotifs.unshift(fullNotif);
+
+    // Keep max 30
+    if (demoNotifs.length > 30) {
+      const removed = demoNotifs.pop();
+      const el = document.querySelector(`[data-id="${removed.id}"]`);
+      if (el) el.remove();
+    }
+
+    const feed = document.getElementById('demoFeed');
+    const el = createDemoNotifElement(fullNotif);
+    feed.insertBefore(el, feed.firstChild);
+
+    // Apply current filter
+    if (currentFilter !== 'all' && fullNotif.priority !== currentFilter) {
+      el.classList.add('hidden-notif');
+    }
+
+    updateCounts();
+  }
+
+  function setFilter(filter, btn) {
+    currentFilter = filter;
+
+    // Update button states
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Show/hide notifications
+    document.querySelectorAll('.demo-notif').forEach(el => {
+      if (filter === 'all' || el.dataset.priority === filter) {
+        el.classList.remove('hidden-notif');
+      } else {
+        el.classList.add('hidden-notif');
+      }
+    });
+  }
+
+  // ===== Toast =====
+  function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    const icon = document.getElementById('toastIcon');
+    const text = document.getElementById('toastText');
+
+    text.textContent = message;
+
+    if (type === 'success') {
+      icon.style.background = 'rgba(0,217,163,0.12)';
+      icon.style.color = '#00D9A3';
+      icon.innerHTML = '<i class="fas fa-check"></i>';
+    } else if (type === 'info') {
+      icon.style.background = 'rgba(255,107,53,0.12)';
+      icon.style.color = '#FF6B35';
+      icon.innerHTML = '<i class="fas fa-info"></i>';
+    }
+
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3500);
+  }
+
+  // ===== Scroll reveal =====
+  function initScrollReveal() {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+  }
+
+  // ===== Animated counters =====
+  function initCounters() {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !entry.target.dataset.animated) {
+          entry.target.dataset.animated = 'true';
+          const target = parseFloat(entry.target.dataset.target);
+          const suffix = entry.target.dataset.suffix || '';
+          const isDecimal = entry.target.dataset.decimal === 'true';
+          const duration = 2000;
+          const startTime = performance.now();
+
+          function update(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            // Ease out cubic
+            const eased = 1 - Math.pow(1 - progress, 3);
+            const current = target * eased;
+
+            entry.target.textContent = (isDecimal ? current.toFixed(1) : Math.round(current)) + suffix;
+
+            if (progress < 1) {
+              requestAnimationFrame(update);
+            }
+          }
+
+          requestAnimationFrame(update);
+        }
+      });
+    }, { threshold: 0.5 });
+
+    document.querySelectorAll('.stat-number[data-target]').forEach(el => observer.observe(el));
+  }
+
+  // ===== Nav scroll effect =====
+  function initNavScroll() {
+    const nav = document.getElementById('mainNav');
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 50) {
+        nav.classList.add('scrolled');
+      } else {
+        nav.classList.remove('scrolled');
+      }
+    });
+  }
+
+  // ===== Mouse glow effect on hero =====
+  function initMouseGlow() {
+    const hero = document.querySelector('.hero-section');
+    if (!hero) return;
+
+    const glow = document.createElement('div');
+    glow.style.cssText = `
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,107,53,0.08), transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+      transition: transform 0.1s ease-out;
+      will-change: transform;
+    `;
+    hero.appendChild(glow);
+
+    hero.addEventListener('mousemove', (e) => {
+      const rect = hero.getBoundingClientRect();
+      const x = e.clientX - rect.left - 200;
+      const y = e.clientY - rect.top - 200;
+      glow.style.transform = `translate(${x}px, ${y}px)`;
+    });
+  }
+
+  // ===== Initialize =====
+  document.addEventListener('DOMContentLoaded', () => {
+    createNotifRain();
+    animatePhone();
+    initScrollReveal();
+    initCounters();
+    initNavScroll();
+    initMouseGlow();
+
+    // Pre-populate demo with a few notifications
+    for (let i = 0; i < 5; i++) {
+      addDemoNotification();
+    }
+
+    // Auto-add notifications every 3 seconds
+    autoInterval = setInterval(addDemoNotification, 3000);
+  });
+</script>
+</body>
+</html>
